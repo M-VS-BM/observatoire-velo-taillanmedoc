@@ -1,1 +1,471 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnostic Aménagements Cyclables</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Proj4js pour la gestion des projections (EPSG:3945) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --bg-light: #f8f9fa;
+        }
 
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* Panneau de contrôle personnalisé */
+        #custom-legend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            width: 300px;
+            max-height: 90vh;
+            overflow-y: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            padding: 15px;
+        }
+
+        .legend-header {
+            border-bottom: 2px solid var(--bg-light);
+            margin-bottom: 15px;
+            padding-bottom: 5px;
+        }
+
+        .legend-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: var(--primary-color);
+        }
+
+        .category-block {
+            margin-bottom: 15px;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .category-header {
+            background: #fdfdfd;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            user-select: none;
+            border-bottom: 1px solid #eee;
+        }
+
+        .category-header:hover {
+            background: #f5f5f5;
+        }
+
+        .category-title-container {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+
+        .category-title {
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            color: #7f8c8d;
+        }
+
+        .category-content {
+            padding: 8px;
+            display: block;
+        }
+
+        .category-content.collapsed {
+            display: none;
+        }
+
+        .layer-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .layer-item:hover {
+            background: var(--bg-light);
+        }
+
+        .layer-item input {
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .symbol {
+            width: 12px;
+            height: 12px;
+            margin-right: 10px;
+            border-radius: 2px;
+            display: inline-block;
+            border: 1px solid rgba(0,0,0,0.2);
+            flex-shrink: 0;
+        }
+
+        /* Bouton de changement de fond personnalisé */
+        .basemap-toggle {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 10px 15px;
+            border-radius: 50px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            border: 2px solid #fff;
+            cursor: pointer;
+            font-weight: bold;
+            color: var(--primary-color);
+            transition: all 0.2s;
+        }
+
+        .basemap-toggle:hover {
+            background: var(--bg-light);
+            transform: translateY(-2px);
+        }
+
+        /* Menu contextuel clic droit */
+        #context-menu {
+            position: absolute;
+            z-index: 2000;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            display: none;
+            padding: 5px 0;
+            min-width: 180px;
+        }
+
+        .context-menu-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: var(--primary-color);
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .context-menu-item:hover {
+            background: var(--bg-light);
+        }
+
+        /* Photos des popups grand format */
+        .popup-photo {
+            width: 600px !important; 
+            max-width: 100% !important;
+            height: auto;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: block;
+        }
+
+        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 5px; }
+        .leaflet-popup-content { width: 620px !important; margin: 15px !important; }
+
+        /* Style pour les étiquettes de texte (tooltips permanents) */
+        .project-label {
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid #e91e63;
+            border-radius: 4px;
+            color: #e91e63;
+            font-weight: bold;
+            font-size: 11px;
+            padding: 2px 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        @media (max-width: 700px) {
+            #custom-legend { width: 240px; }
+            .leaflet-popup-content { width: 280px !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="custom-legend">
+        <div class="legend-header">
+            <h2>Diagnostic Cyclable</h2>
+        </div>
+        
+        <div id="legend-container">
+            <!-- Les blocs de catégories seront générés par JS -->
+        </div>
+    </div>
+
+    <button class="basemap-toggle" onclick="toggleBasemap()">
+        <span id="toggle-text">Passer en Satellite</span>
+    </button>
+
+    <div id="context-menu">
+        <div class="context-menu-item" onclick="openGoogleMaps()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+            Ouvrir dans Google Maps
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // Définition de la projection CC45 (EPSG:3945)
+        proj4.defs("EPSG:3945","+proj=lcc +lat_1=44.25 +lat_2=45.75 +lat_0=45 +lon_0=3 +x_0=1700000 +y_0=4200000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+
+        const map = L.map('map').setView([44.87826446160561, -0.6565541041113465], 14.5);
+
+        // --- GESTION DE L'ORDRE DES COUCHES ---
+        map.createPane('contextPane');
+        map.getPane('contextPane').style.zIndex = 350; 
+        
+        map.createPane('backgroundPane');
+        map.getPane('backgroundPane').style.zIndex = 400; 
+        
+        map.createPane('diagnosticPane');
+        map.getPane('diagnosticPane').style.zIndex = 450; 
+
+        // Pane spéciale pour la couche projet (au dessus de tout)
+        map.createPane('projectPane');
+        map.getPane('projectPane').style.zIndex = 600;
+
+        const voyagerLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 20
+        }).addTo(map);
+
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri',
+            maxZoom: 19
+        });
+
+        let isSatellite = false;
+        function toggleBasemap() {
+            if (isSatellite) {
+                map.removeLayer(satelliteLayer);
+                voyagerLayer.addTo(map);
+                document.getElementById('toggle-text').innerText = "Passer en Satellite";
+            } else {
+                map.removeLayer(voyagerLayer);
+                satelliteLayer.addTo(map);
+                document.getElementById('toggle-text').innerText = "Passer en Plan";
+            }
+            isSatellite = !isSatellite;
+        }
+
+        // Context Menu Logic
+        let currentContextMenuCoords = null;
+        const contextMenu = document.getElementById('context-menu');
+        map.on('contextmenu', (e) => {
+            currentContextMenuCoords = e.latlng;
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = e.containerPoint.x + 'px';
+            contextMenu.style.top = e.containerPoint.y + 'px';
+        });
+        document.addEventListener('click', () => contextMenu.style.display = 'none');
+        function openGoogleMaps() {
+            if (currentContextMenuCoords) {
+                window.open(`https://www.google.com/maps/search/?api=1&query=${currentContextMenuCoords.lat},${currentContextMenuCoords.lng}`, '_blank');
+            }
+        }
+
+        const layers = {};
+        const categories = {
+            amenagement: { title: "Aménagement défaillant", contentId: "cat-amenagement" },
+            signalisation: { title: "Signalisation défaillante", contentId: "cat-signalisation" },
+            comportement: { title: "Risques & Comportements", contentId: "cat-comportement" },
+            contexte: { title: "Données de contexte", contentId: "cat-contexte" }
+        };
+
+        const layerConfigs = [
+            // DIAGNOSTICS - AMÉNAGEMENT
+            { id: 'giration', url: 'giration.geojson', name: 'Angle de giration serré', category: 'amenagement', color: '#9b59b6', weight: 4, pane: 'diagnosticPane' },
+            { id: 'cone', url: 'cone.geojson', name: 'Cône de visibilité', category: 'amenagement', color: '#f1c40f', weight: 2, fillOpacity: 0.4, pane: 'diagnosticPane' },
+            { id: 'revetement', url: 'revetement.geojson', name: 'Revêtement défectueux', category: 'amenagement', color: '#7f8c8d', weight: 5, fillOpacity: 0.5, pane: 'diagnosticPane' },
+            { id: 'noamenagement', url: 'noamenagement.geojson', name: 'Absence d\'aménagement', category: 'amenagement', color: '#2c3e50', weight: 4, pane: 'backgroundPane' },
+            { id: 'eau', url: 'eau.geojson', name: 'Zones d\'eau', category: 'amenagement', color: '#3498db', weight: 1, fillOpacity: 0.5, pane: 'contextPane' },
+            
+            // DIAGNOSTICS - SIGNALISATION
+            { id: 'traverse', url: 'traverse.geojson', name: 'Traversée non indiquée', category: 'signalisation', color: '#e74c3c', weight: 5, pane: 'diagnosticPane' },
+            { id: 'bandes', url: 'bandes.geojson', name: 'Bandes cyclables étroites', category: 'signalisation', color: '#e67e22', weight: 4, pane: 'diagnosticPane' },
+            { id: 'marquages', url: 'marquages.geojson', name: 'Marquage effacé', category: 'signalisation', color: '#95a5a6', weight: 4, dashArray: '5, 5', pane: 'diagnosticPane' },
+            { id: 'sasvelo', url: 'sasvelo.geojson', name: 'Sas Vélo', category: 'signalisation', color: '#ffffff', weight: 4, pane: 'diagnosticPane' },
+            
+            // DIAGNOSTICS - COMPORTEMENT / VÉGÉTATION
+            { id: 'vegetation', url: 'vegetation.geojson', name: 'Végétation (entretien ST)', category: 'comportement', color: '#27ae60', weight: 2, fillOpacity: 0.4, pane: 'diagnosticPane' },
+            { id: 'vegetationparticulier', url: 'vegetationparticulier.geojson', name: 'Végétation (riverains)', category: 'comportement', color: '#16a085', weight: 2, fillOpacity: 0.4, pane: 'diagnosticPane' },
+            { id: 'stationnement', url: 'stationnement.geojson', name: 'Stationnement gênant', category: 'comportement', color: '#f39c12', weight: 4, pane: 'diagnosticPane' },
+            { id: 'risquedeconflit', url: 'risquedeconflit.geojson', name: 'Risque de conflit', category: 'comportement', color: '#c0392b', weight: 4, pane: 'backgroundPane' },
+
+            // CONTEXTE
+            { id: 'metropole', url: 'proprietemetropole.geojson', name: 'Propriété Métropole', category: 'contexte', color: '#d35400', weight: 3, fillOpacity: 0.1, hiddenByDefault: true, pane: 'contextPane' },
+            { id: 'reseauxstructurant', url: 'reseauxstructurant.geojson', name: 'Réseau Structurant', category: 'contexte', color: '#16a085', weight: 3, fill: false, hiddenByDefault: true, pane: 'contextPane' },
+            { id: 'projet', url: 'projet.geojson', name: 'Projets', category: 'contexte', color: '#e91e63', weight: 6, hiddenByDefault: true, pane: 'projectPane' }
+        ];
+
+        function onEachFeature(feature, layer, configId) {
+            const props = feature.properties;
+
+            // Logique spécifique pour la couche PROJET : Étiquette permanente
+            if (configId === 'projet') {
+                const text = props.GO_DESCRITION || 'Projet';
+                layer.bindTooltip(text, { 
+                    permanent: true, 
+                    direction: 'center', 
+                    className: 'project-label',
+                    sticky: false
+                });
+                return; // On ne met pas de popup pour le projet comme demandé
+            }
+
+            // Logique pour les autres couches : Fenêtre Popup
+            let content = '<div class="popup-content">';
+            if (configId === 'metropole' && props.SOUS_THEME) {
+                content += `<b>${props.SOUS_THEME}</b>`;
+                if (props.id) content += `<br><small>ID: ${props.id}</small>`;
+            } else {
+                const desc = props.description || props.Notes || 'Information';
+                content += `<b>${desc}</b>`;
+            }
+            
+            if (props.photo || props.Photo) {
+                content += `<br><img src="${props.photo || props.Photo}" class="popup-photo" alt="Photo" onerror="this.style.display='none'">`;
+            }
+            content += '</div>';
+            
+            layer.bindPopup(content, { maxWidth: 620, minWidth: 620 });
+        }
+
+        async function loadGeoLayer(config) {
+            try {
+                const response = await fetch(config.url);
+                if (!response.ok) return;
+                const data = await response.json();
+                const needsReprojection = (data.crs && JSON.stringify(data.crs).includes('3945'));
+                
+                const layer = L.geoJSON(data, {
+                    coordsToLatLng: (coords) => {
+                        if (needsReprojection || coords[0] > 1000) {
+                            var pt = proj4("EPSG:3945", "EPSG:4326", [coords[0], coords[1]]);
+                            return new L.LatLng(pt[1], pt[0]);
+                        }
+                        return new L.LatLng(coords[1], coords[0]);
+                    },
+                    style: (feature) => {
+                        let s = {
+                            color: config.color, weight: config.weight, opacity: 1,
+                            fillColor: config.color, fillOpacity: config.fill === false ? 0 : (config.fillOpacity || 0.2),
+                            dashArray: config.dashArray || null, pane: config.pane
+                        };
+                        if (config.id === 'metropole' && feature.properties) {
+                            if (feature.properties.SOUS_THEME === "COMMUNES") {
+                                s.fillColor = '#3498db'; s.fillOpacity = 0.4; s.color = '#2980b9';
+                            } else if (feature.properties.SOUS_THEME === "METROPOLE") {
+                                s.fillColor = '#1a5276'; s.fillOpacity = 0.5; s.color = '#154360';
+                            }
+                        }
+                        return s;
+                    },
+                    pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 8, fillColor: config.color, color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.8, pane: config.pane }),
+                    onEachFeature: (f, l) => onEachFeature(f, l, config.id)
+                });
+
+                layers[config.id] = layer;
+                if (!config.hiddenByDefault) layer.addTo(map);
+                addLayerToUI(config);
+            } catch (e) { console.warn("Erreur chargement " + config.url); }
+        }
+
+        function initLegendUI() {
+            const container = document.getElementById('legend-container');
+            Object.keys(categories).forEach(key => {
+                const cat = categories[key];
+                const block = document.createElement('div');
+                block.className = 'category-block';
+                block.innerHTML = `
+                    <div class="category-header">
+                        <input type="checkbox" checked id="master-${key}">
+                        <div class="category-title-container" id="title-container-${key}">
+                            <span class="category-title">${cat.title}</span>
+                            <small style="margin-left:5px">▼</small>
+                        </div>
+                    </div>
+                    <div class="category-content" id="${cat.contentId}"></div>
+                `;
+                
+                // Toggle Category Content (Repli cliquable sur le titre et la flèche)
+                block.querySelector(`#title-container-${key}`).onclick = () => {
+                    block.querySelector('.category-content').classList.toggle('collapsed');
+                };
+
+                // Master Checkbox Logic (Tout décocher)
+                block.querySelector(`#master-${key}`).onchange = (e) => {
+                    const checked = e.target.checked;
+                    const items = block.querySelectorAll('.layer-item input');
+                    items.forEach(input => {
+                        if (input.checked !== checked) {
+                            input.checked = checked;
+                            input.dispatchEvent(new Event('change'));
+                        }
+                    });
+                };
+
+                container.appendChild(block);
+            });
+        }
+
+        function addLayerToUI(config) {
+            const container = document.getElementById(categories[config.category].contentId);
+            const div = document.createElement('div');
+            div.className = 'layer-item';
+            div.innerHTML = `
+                <input type="checkbox" id="chk-${config.id}" ${!config.hiddenByDefault ? 'checked' : ''}>
+                <label for="chk-${config.id}" style="display:flex; align-items:center">
+                    <span class="symbol" style="background:${config.color}"></span>
+                    ${config.name}
+                </label>
+            `;
+            div.querySelector('input').onchange = (e) => {
+                if (e.target.checked) {
+                    if (layers[config.id]) map.addLayer(layers[config.id]);
+                } else {
+                    if (layers[config.id]) map.removeLayer(layers[config.id]);
+                }
+            };
+            container.appendChild(div);
+        }
+
+        window.onload = () => {
+            initLegendUI();
+            layerConfigs.forEach(loadGeoLayer);
+        };
+    </script>
+</body>
+</html>
